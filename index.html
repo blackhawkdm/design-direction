@@ -68,6 +68,13 @@
   .locked b{color:var(--body);font-weight:600}
   details{margin-top:14px}
   summary{font-size:13px;color:var(--muted);cursor:pointer}
+  #codeIn{width:100%;padding:11px 13px;border:1px solid var(--hairline);border-radius:8px;
+    background:#fff;font:inherit;font-size:14px;color:var(--ink);margin-bottom:9px}
+  #codeIn:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
+  #codeBtn,#briefCopy{background:var(--accent);color:#fff;font-size:14px;padding:11px 18px;min-height:44px}
+  #briefCopy{margin-bottom:2px}
+  #codeMsg{margin-bottom:2px}
+  #codeMsg.err{color:var(--warn)}
   textarea{width:100%;height:260px;margin-top:10px;padding:13px;border:1px solid var(--hairline);
     border-radius:9px;background:#fff;color:var(--body);font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
     white-space:pre;overflow:auto}
@@ -137,9 +144,24 @@
     typeface on top of Inter, and motion is undefined in the spec, so it's ours to set.
   </div>
 
-  <details>
-    <summary>Full design brief (for Wren / Claude)</summary>
+  <details id="briefBox" hidden>
+    <summary>See the full design brief this produced</summary>
+    <p class="qs" style="margin:10px 0 8px">This is what goes to the design team — your five
+      answers turned into concrete instructions, plus the brand rules that already bind the build.
+      Nothing here needs your input; it's here if you want to see where the answers land.</p>
+    <button class="btn" id="briefCopy" type="button">Copy brief</button>
     <textarea id="out" readonly aria-label="Full design direction brief"></textarea>
+  </details>
+
+  <details id="rebuild">
+    <summary>Wren — rebuild the brief from a reply</summary>
+    <p class="qs" style="margin:10px 0 8px">Paste the email he sent back (or just the
+      <code>BHD1;</code> line at the bottom of it). The brief regenerates above — no need to
+      tap through his answers again.</p>
+    <input id="codeIn" type="text" placeholder="Paste his reply or the BHD1; code"
+      aria-label="Paste reply or restore code">
+    <button class="btn" id="codeBtn" type="button">Rebuild brief</button>
+    <div class="hint" id="codeMsg"></div>
   </details>
 
 </div>
@@ -330,6 +352,7 @@ function render(){
   $("q5").hidden = !(picked.length===3 && placed===3 && anti.length>0 && carrier);
   var complete = picked.length===3 && placed===3 && anti.length>0 && carrier && risk!=null;
   $("done").hidden = !complete;
+  $("briefBox").hidden = !complete;
 
   if(complete){
     var brief=buildBrief();
@@ -344,6 +367,34 @@ function render(){
   }
 }
 
+function stateCode(){
+  var p=["BHD1"];
+  picked.forEach(function(id){ p.push(id+"="+vals[id]); });
+  p.push("anti="+anti.join("~"));
+  p.push("carrier="+carrier);
+  p.push("risk="+risk);
+  return p.join(";");
+}
+
+function restore(raw){
+  var m = String(raw||"").match(/BHD1;[^\s]+/);
+  if(!m) return "Couldn't find a code in that. Look for the line starting BHD1; at the bottom of the email.";
+  var ids = AXES.map(function(a){ return a.id; });
+  var P=[], V={}, A=[], C=null, R=null;
+  m[0].split(";").forEach(function(tok){
+    var i=tok.indexOf("="); if(i<0) return;
+    var k=tok.slice(0,i), v=tok.slice(i+1);
+    if(ids.indexOf(k)>-1){ P.push(k); V[k]=+v; }
+    else if(k==="anti"){ A = v?v.split("~"):[]; }
+    else if(k==="carrier"){ C=v; }
+    else if(k==="risk"){ R=+v; }
+  });
+  if(P.length!==3 || !C || R==null) return "That code looks incomplete — it should list three axes, an anti list, a carrier, and a risk level.";
+  picked=P; vals=V; anti=A; carrier=C; risk=R;
+  render();
+  return null;
+}
+
 function shortAnswers(){
   var L=["Blackhawk site — design direction",""];
   L.push("Defining (in order):");
@@ -356,6 +407,8 @@ function shortAnswers(){
   L.push("Personality lives in: "+carrier);
   var r=RISK.filter(function(x){return x.v===risk;})[0];
   L.push("Convention risk: "+(r?r.t:risk)+" ("+risk+"/9)");
+  L.push("");
+  L.push(stateCode());
   return L.join("\n");
 }
 
@@ -461,6 +514,24 @@ $("copyBtn").onclick=function(){
     try{ document.execCommand("copy"); ok(); }catch(e){ $("out").focus(); $("out").select(); }
     document.body.removeChild(ta);
   }
+};
+
+$("codeBtn").onclick=function(){
+  var err=restore($("codeIn").value);
+  $("codeMsg").textContent = err || "Rebuilt — the full brief is open above.";
+  $("codeMsg").className = "hint"+(err?" err":" on");
+  if(!err){ $("briefBox").hidden=false; $("briefBox").open=true;
+    if($("briefBox").scrollIntoView) $("briefBox").scrollIntoView({block:"nearest"}); }
+};
+$("codeIn").addEventListener("keydown",function(e){ if(e.key==="Enter") $("codeBtn").click(); });
+
+$("briefCopy").onclick=function(){
+  var btn=this, txt=$("out").value;
+  function ok(){ btn.textContent="Copied"; setTimeout(function(){ btn.textContent="Copy brief"; },2200); }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok,sel); }
+  else sel();
+  function sel(){ $("out").focus(); $("out").select();
+    try{ document.execCommand("copy"); ok(); }catch(e){} }
 };
 
 render();
