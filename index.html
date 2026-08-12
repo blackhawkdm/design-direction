@@ -377,18 +377,23 @@ function stateCode(){
 }
 
 function restore(raw){
-  var m = String(raw||"").match(/BHD1;[^\s]+/);
+  var m = String(raw||"").match(/BHD1;[^\n\r]+/);
   if(!m) return "Couldn't find a code in that. Look for the line starting BHD1; at the bottom of the email.";
   var ids = AXES.map(function(a){ return a.id; });
   var P=[], V={}, A=[], C=null, R=null;
   m[0].split(";").forEach(function(tok){
     var i=tok.indexOf("="); if(i<0) return;
-    var k=tok.slice(0,i), v=tok.slice(i+1);
+    var k=tok.slice(0,i).trim(), v=tok.slice(i+1).trim();
     if(ids.indexOf(k)>-1){ P.push(k); V[k]=+v; }
     else if(k==="anti"){ A = v?v.split("~"):[]; }
     else if(k==="carrier"){ C=v; }
-    else if(k==="risk"){ R=+v; }
+    else if(k==="risk"){ R=isNaN(+v)?null:+v; }
   });
+  if(C){
+    var cm = CARRIERS.filter(function(x){ return x.name===C; })[0]
+      || CARRIERS.filter(function(x){ return x.name.indexOf(C)===0; })[0];
+    C = cm ? cm.name : null;
+  }
   if(P.length!==3 || !C || R==null) return "That code looks incomplete — it should list three axes, an anti list, a carrier, and a risk level.";
   picked=P; vals=V; anti=A; carrier=C; risk=R;
   render();
